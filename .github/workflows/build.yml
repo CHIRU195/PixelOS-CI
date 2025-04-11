@@ -45,7 +45,8 @@ jobs:
         mka bacon
 
     - name: Upload ROM output
-      uses: actions/upload-artifact@v3.1.3
+      uses: actions/upload-artifact@v3
+
       with:
         name: PixelOS-denniz-ROM
         path: out/target/product/denniz/*.zip
