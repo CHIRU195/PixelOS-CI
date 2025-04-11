@@ -1,0 +1,63 @@
+name: Build PixelOS for denniz
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    env:
+      ROM_MANIFEST: https://github.com/PixelOS-AOSP/manifest
+      ROM_BRANCH: fourteen
+      DEVICE_CODENAME: denniz
+      DEVICE_TREE: https://github.com/CHIRU195/device_oneplus_denniz.git
+      DEVICE_PATH: device/oneplus/denniz
+      DEVICE_BRANCH: fourteen
+      VENDOR_TREE: https://github.com/CHIRU195/vendor_oneplus_denniz.git
+      VENDOR_PATH: vendor/oneplus/denniz
+      VENDOR_BRANCH: fourteen
+      KERNEL_TREE: https://github.com/CHIRU195/kernel_oneplus_mt6877.git
+      KERNEL_PATH: kernel/oneplus/mt6877
+      KERNEL_BRANCH: fourteen
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y bc bison build-essential curl flex g++-multilib gcc-multilib git gnupg gperf \
+            imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev \
+            libsdl1.2-dev libssl-dev libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc \
+            zip zlib1g-dev openjdk-17-jdk wget ccache
+
+      - name: Initialize ROM repo (shallow sync)
+        run: |
+          mkdir rom && cd rom
+          repo init -u $ROM_MANIFEST -b $ROM_BRANCH --depth=1
+          repo sync -c --no-tags --no-clone-bundle -j8
+
+      - name: Clone device, vendor, kernel trees
+        run: |
+          cd rom
+          git clone --depth=1 -b $DEVICE_BRANCH $DEVICE_TREE $DEVICE_PATH
+          git clone --depth=1 -b $VENDOR_BRANCH $VENDOR_TREE $VENDOR_PATH
+          git clone --depth=1 -b $KERNEL_BRANCH $KERNEL_TREE $KERNEL_PATH
+
+      - name: Setup environment + limit output
+        run: |
+          cd rom
+          source build/envsetup.sh
+          lunch aosp_$DEVICE_CODENAME-userdebug
+          export USE_CCACHE=1
+          ccache -M 5G  # Limits cache to 5GB
+          make installclean
+          make bacon -j$(nproc --all)
+
+      - name: Upload output (ROM ZIP only)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PixelOS-ROM
+          path: rom/out/target/product/$DEVICE_CODENAME/*.zip
